@@ -1,88 +1,37 @@
-from numpy import *
-from keras.models import load_model
-from keras.preprocessing import image
-from tkinter import *
-from PIL import ImageTk, Image
-from tkinter import filedialog
+import streamlit as st
+import fitz
 
-def wrt(st, fname):
-    file = open(fname, "w+")
-    file.write(st)
-    file.close()
+def extract_info(pdf_file):
+  doc = fitz.open(pdf_file)
+  images = []
+  text = ""
 
-def red(fname):
-    file = open(fname, "r")
-    f = file.read()
-    file.close()
-    return f
+  for page in doc:
+    for img_xref, _, img_bytes in page.getImageList():
+      filename = f"image_{img_xref}.jpg"
+      with open(filename, "wb") as f:
+        f.write(img_bytes)
+      images.append(filename)
+    text += page.get_text("text")  # Basic text extraction
 
-def open_img():
-    try:
-        x = openfilename()
-        wrt(x, "upload")
-        print(x)
-        img = Image.open(x)
-    except:
-        x = 'images/error.png'
-        print(x)
-        img = Image.open(x)
-    img = img.resize((325, 200), Image.ANTIALIAS)
-    img = ImageTk.PhotoImage(img)
-    panel = Label(root, image=img)
-    panel.image = img
-    panel.place(x=455, y=100)
+  return {"images": images, "text": text}
 
-def openfilename():
-    filename = filedialog.askopenfilename(title='UPLOAD IMAGE')
-    return filename
+st.title("Medical Report Data Extractor")
 
-def callback():
-    patient = "\n IMAGE FILE NOT UPLOADED..."
-    try:
-        model = load_model('models/skin_cancer.h5')
-        test_image = image.load_img(red("upload"), target_size=(224, 224))
-        test_image = image.img_to_array(test_image)
-        test_image = expand_dims(test_image, axis=0)
-        result = model.predict(test_image)
-        result = round(result[0][0])
-        patient = "BENIGN" if result == 1 else "MALIGNANT"
-        output.set("\n " + patient + " SKIN DETECTED !\n")
-        print(patient)
-    except Exception as e:
-        output.set(patient)
-        print("EXCEPTION:", e)
+uploaded_file = st.file_uploader("Upload your Medical Report (PDF)", type="pdf")
 
-root = Tk()
-root.title("SKIN CANCER DETECTOR")
-output = StringVar()
-root.attributes('-fullscreen', True)
+if uploaded_file is not None:
+  data = extract_info(uploaded_file)
 
-background = PhotoImage(file="images/cover_sc.png")
-Label(root, image=background).place(x=0, y=0)
+  # Display extracted text
+  st.subheader("Extracted Text")
+  st.text_area("Text", data["text"], height=300)
 
-img = Image.open("images/input.png")
-img = img.resize((325, 200), Image.ANTIALIAS)
-img = ImageTk.PhotoImage(img)
-panel = Label(root, image=img)
-panel.image = img
-panel.place(x=455, y=100)
+  # Display extracted images (if any)
+  if data["images"]:
+    st.subheader("Extracted Images")
+    for image in data["images"]:
+      st.image(image, width=250)
+  else:
+    st.info("No images found in this PDF.")
 
-upload = PhotoImage(file=r"images/upload.png")
-Button(root, text="upload", bd=0, highlightthickness=0, image=upload,
-       command=open_img).place(x=150, y=150)
-
-Label(root, text="\nOUTPUT\n",
-      width=25,
-      font=("Bauhaus 93", 20)).place(x=432, y=335)
-Label(root, text="", textvariable=output,
-      font=("Bauhaus 93", 20)).place(x=432, y=335)
-
-detect = PhotoImage(file=r"images/detect.png")
-Button(root, text="detect", bd=0, highlightthickness=0, image=detect,
-       command=callback).place(x=150, y=340)
-
-close = PhotoImage(file=r"images/home.png")
-Button(root, text="close", image=close, highlightthickness=0,
-       command=root.destroy).place(x=0, y=0)
-
-root.mainloop()
